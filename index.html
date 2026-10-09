@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>djset commenter</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='13' cy='16' r='11' fill='%23ff5a1f'/%3E%3Crect x='17' y='4' width='12' height='12' fill='%23ffd23f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  /* JetBrains Mono is named explicitly (Google Fonts online, the local install offline) —
+     system-ui is remapped on this PC, so never rely on it. */
+  :root {
+    color-scheme: dark;
+    --bg: #08080a;
+    --panel: #111114;
+    --panel-2: #18181c;
+    --line: #25252b;
+    --text: #f2f0ea;
+    --muted: #8d8b93;
+    --dim: #5a5960;
+    --accent: #ff5a1f;
+    --accent-ink: #140600;
+    --mark: #ffd23f;
+    --mark-ink: #1a1400;
+    --live: #ff3355;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 32px 64px; }
+
+  /* ── header ─────────────────────────────────────────── */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 13px; letter-spacing: .16em; }
+  .brand svg { width: 26px; height: 26px; display: block; }
+  .ghost {
+    height: 32px; padding: 0 12px; border: 1px solid var(--line); background: transparent;
+    font-size: 11px; font-weight: 700; letter-spacing: .12em; color: var(--muted);
+  }
+  .ghost:hover { color: var(--text); border-color: var(--text); }
+  .ghost[aria-pressed="true"] { color: var(--text); }
+
+  /* ── length ─────────────────────────────────────────── */
+  .setup {
+    display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap;
+    padding: 14px 18px; background: var(--panel); border: 1px solid var(--line); border-bottom: 0;
+  }
+  .label { font-size: 11px; font-weight: 800; letter-spacing: .16em; color: var(--muted); }
+  .label b { color: var(--accent); margin-right: 8px; }
+  #len {
+    width: 132px; height: 40px; padding: 0 12px; background: var(--bg); border: 1px solid var(--line);
+    font-size: 18px; font-weight: 700; outline: none; font-variant-numeric: tabular-nums;
+  }
+  #len::placeholder { color: var(--dim); font-weight: 500; }
+  #len:focus { border-color: var(--text); }
+  #len.bad { border-color: var(--live); animation: shake .3s; }
+  @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+  .chips { display: flex; gap: 6px; }
+  .chip {
+    height: 32px; padding: 0 10px; background: var(--panel-2); border: 1px solid var(--line);
+    font-size: 12px; font-weight: 700; color: var(--muted);
+  }
+  .chip:hover { color: var(--text); border-color: var(--text); }
+  .setup .hint { color: var(--dim); font-size: 12px; margin-left: auto; }
+
+  /* ── deck ───────────────────────────────────────────── */
+  .deck {
+    position: relative; overflow: hidden;
+    display: grid; grid-template-columns: auto 1fr; gap: 24px 44px; align-items: center;
+    padding: 36px; background: var(--panel); border: 1px solid var(--line);
+  }
+  .deck::before, .deck::after { content: ""; position: absolute; pointer-events: none; }
+  .deck::before { width: 420px; height: 420px; border-radius: 50%; background: var(--panel-2); right: -150px; top: -190px; }
+  .deck::after { width: 120px; height: 120px; background: var(--panel-2); right: 64px; bottom: -60px; transform: rotate(45deg); }
+  .deck > * { position: relative; z-index: 1; }
+
+  .play {
+    --p: 0;
+    position: relative; width: 208px; height: 208px; border-radius: 50%; border: 0;
+    background: var(--accent); color: var(--accent-ink);
+    display: grid; place-items: center;
+    transition: transform .12s ease, background .15s ease, opacity .15s ease;
+  }
+  .play:hover { transform: scale(1.03); }
+  .play:active { transform: scale(.97); }
+  .play svg { width: 84px; height: 84px; fill: currentColor; display: none; }
+  .play .i-play { margin-left: 10px; }
+  .play .num { display: none; position: relative; z-index: 1; font-size: 112px; font-weight: 800; line-height: 1; color: var(--accent); }
+  .play[data-state="nolen"] { opacity: .35; }
+  .play[data-state="nolen"] .i-play,
+  .play[data-state="idle"] .i-play,
+  .play[data-state="paused"] .i-play { display: block; }
+  .play[data-state="ended"] .i-replay { display: block; }
+  .play[data-state="live"] { background: var(--text); color: var(--bg); animation: breathe 2s ease-in-out infinite; }
+  .play[data-state="live"] .i-pause { display: block; }
+  .play[data-state="count"] { background: conic-gradient(var(--accent) calc(var(--p) * 1turn), var(--line) 0); }
+  .play[data-state="count"]::before { content: ""; position: absolute; inset: 12px; border-radius: 50%; background: var(--panel); }
+  .play[data-state="count"] .num { display: block; }
+  @keyframes breathe { 50% { box-shadow: 0 0 0 14px rgba(242, 240, 234, .07); } }
+
+  .readout { min-width: 0; }
+  .clock {
+    font-size: clamp(56px, 9vw, 116px); font-weight: 800; line-height: .95; letter-spacing: -.045em;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .clock .of { font-size: .3em; font-weight: 500; letter-spacing: 0; color: var(--dim); margin-left: .5em; }
+  .status { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .status .dot { width: 10px; height: 10px; background: var(--dim); flex: none; }
+  .deck[data-state="live"] .status { color: var(--text); }
+  .deck[data-state="live"] .status .dot { background: var(--live); border-radius: 50%; animation: blink 1s steps(1) infinite; }
+  .deck[data-state="count"] .status { color: var(--accent); }
+  .deck[data-state="count"] .status .dot { background: var(--accent); }
+  @keyframes blink { 50% { opacity: .2; } }
+
+  .controls { display: flex; align-items: stretch; gap: 12px; margin-top: 22px; flex-wrap: wrap; }
+  .nudge { display: flex; }
+  .nudge button {
+    width: 54px; height: 64px; background: var(--bg); border: 1px solid var(--line); margin-left: -1px;
+    font-size: 13px; font-weight: 700; color: var(--muted);
+  }
+  .nudge button:first-child { margin-left: 0; }
+  .nudge button:hover { color: var(--text); border-color: var(--text); position: relative; }
+  .comment-btn {
+    flex: 1; min-width: 220px; height: 64px; border: 0; background: var(--mark); color: var(--mark-ink);
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    font-size: 20px; font-weight: 800; letter-spacing: .14em;
+    transition: transform .1s ease;
+  }
+  .comment-btn:active { transform: translateY(2px); }
+  .comment-btn kbd {
+    font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    padding: 3px 7px; border: 1.5px solid currentColor; opacity: .6;
+  }
+
+  /* ── timeline ───────────────────────────────────────── */
+  .timeline { position: relative; margin-top: 16px; padding: 14px 28px 30px; background: var(--panel); border: 1px solid var(--line); }
+  .markers { position: relative; height: 72px; }
+  .mk {
+    position: absolute; bottom: calc(var(--row) * 22px + 6px); left: 0;
+    width: 20px; height: 20px; padding: 0; border: 0; background: none; color: var(--mark);
+    transform: translateX(-50%); transition: transform .12s ease, color .12s ease;
+  }
+  .mk svg { width: 100%; height: 100%; display: block; fill: currentColor; }
+  .mk:hover, .mk:focus-visible, .mk.hot { color: var(--text); transform: translateX(-50%) scale(1.3); z-index: 2; }
+  .mk.pending { color: var(--accent); animation: blink .8s steps(1) infinite; z-index: 3; pointer-events: none; }
+  .track { position: relative; height: 16px; background: var(--panel-2); cursor: pointer; touch-action: none; }
+  .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); }
+  .cticks i { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--mark); }
+  .cticks i.pending { background: var(--text); }
+  .head { position: absolute; top: -7px; bottom: -7px; left: 0; width: 3px; margin-left: -1.5px; background: var(--text); pointer-events: none; }
+  .hover {
+    position: absolute; top: calc(100% + 6px); transform: translateX(-50%); z-index: 2;
+    padding: 1px 6px; background: var(--text); color: var(--bg); font-size: 11px; font-weight: 700;
+    pointer-events: none; white-space: nowrap;
+  }
+  .ticks { position: relative; height: 18px; margin-top: 8px; }
+  .ticks span { position: absolute; transform: translateX(-50%); font-size: 11px; color: var(--dim); white-space: nowrap; }
+  .ticks span:first-child { transform: none; }
+  .ticks span:last-child:not(:first-child) { transform: translateX(-100%); }
+  .tl-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); font-size: 12px; pointer-events: none; }
+  .tip {
+    position: absolute; z-index: 5; max-width: 340px; transform: translateY(-100%);
+    padding: 8px 11px; background: var(--text); color: var(--bg); font-size: 13px; line-height: 1.4;
+    pointer-events: none; word-break: break-word;
+  }
+  .tip b { font-weight: 800; }
+
+  /* ── composer ───────────────────────────────────────── */
+  .composer {
+    display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 12px 12px 12px 20px;
+    background: var(--panel); border: 2px solid var(--mark);
+  }
+  .composer .ct { font-size: 20px; font-weight: 800; color: var(--mark); font-variant-numeric: tabular-nums; }
+  .composer .sep { font-size: 20px; color: var(--dim); }
+  .composer input { flex: 1; min-width: 0; height: 44px; background: transparent; border: 0; outline: 0; font-size: 20px; }
+  .composer input::placeholder { color: var(--dim); }
+  .composer .keys { color: var(--dim); font-size: 11px; white-space: nowrap; }
+
+  /* ── list ───────────────────────────────────────────── */
+  .list { margin-top: 16px; background: var(--panel); border: 1px solid var(--line); }
+  .list-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 14px 18px; border-bottom: 1px solid var(--line);
+  }
+  .list-head h2 { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .16em; }
+  .list-head h2 span { color: var(--accent); margin-left: 6px; }
+  .actions { display: flex; gap: 8px; }
+  .btn {
+    height: 36px; padding: 0 14px; background: var(--panel-2); border: 1px solid var(--line);
+    font-size: 12px; font-weight: 700; letter-spacing: .1em; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--text); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover:not(:disabled) { border-color: var(--text); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  ol { list-style: none; margin: 0; padding: 6px 0; }
+  li { display: flex; align-items: baseline; gap: 0; padding: 7px 10px 7px 18px; font-size: 15px; }
+  li:hover { background: var(--panel-2); }
+  li .t { padding: 0; border: 0; background: none; color: var(--mark); font-weight: 700; font-variant-numeric: tabular-nums; }
+  li .sep { color: var(--dim); white-space: pre; }
+  li .txt { flex: 1; min-width: 0; cursor: text; word-break: break-word; }
+  li .edit { flex: 1; min-width: 0; padding: 0 6px; margin: -2px 0; height: 28px; background: var(--bg); border: 1px solid var(--text); outline: 0; font-size: 15px; }
+  li .del {
+    flex: none; width: 28px; height: 24px; margin-left: 8px; padding: 0; border: 0; background: none;
+    color: var(--dim); font-size: 18px; line-height: 1; opacity: 0;
+  }
+  li:hover .del, li .del:focus-visible { opacity: 1; }
+  li .del:hover { color: var(--live); }
+  li.flash { animation: flash 1.4s ease-out; }
+  @keyframes flash { from { background: rgba(255, 210, 63, .22); } }
+  .empty { padding: 26px 18px; color: var(--dim); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 18px; color: var(--dim); font-size: 11px; letter-spacing: .04em; }
+  .legend kbd { font: inherit; font-weight: 700; color: var(--muted); }
+
+  /* ── dialogs ────────────────────────────────────────── */
+  dialog {
+    width: min(460px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text);
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, .72); }
+  dialog form { padding: 24px; }
+  dialog h3 { margin: 0 0 16px; font-size: 12px; font-weight: 800; letter-spacing: .16em; }
+  dialog p { margin: 0 0 4px; color: var(--muted); }
+  dialog input {
+    width: 100%; height: 46px; padding: 0 12px; background: var(--bg); border: 1px solid var(--line);
+    font-size: 18px; outline: none;
+  }
+  dialog input:focus { border-color: var(--text); }
+  .fname { margin-top: 10px; font-size: 12px; color: var(--dim); word-break: break-all; }
+  .fname b { color: var(--mark); font-weight: 700; }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+  .btn.danger { background: var(--live); border-color: var(--live); color: #fff; }
+
+  /* ── narrow ─────────────────────────────────────────── */
+  @media (max-width: 760px) {
+    .wrap { padding: 16px 16px 48px; }
+    .setup .hint { display: none; }
+    .deck { grid-template-columns: 1fr; justify-items: center; text-align: center; padding: 28px 16px; }
+    .play { width: 168px; height: 168px; }
+    .play svg { width: 68px; height: 68px; }
+    .play .num { font-size: 92px; }
+    .readout { width: 100%; }
+    .status { justify-content: center; }
+    .controls { justify-content: center; }
+    .nudge { width: 100%; }
+    .nudge button { flex: 1; width: auto; height: 48px; }
+    .comment-btn { min-width: 0; width: 100%; flex: none; }
+    .timeline { padding: 12px 16px 26px; }
+    .composer { flex-wrap: wrap; padding: 12px 14px; }
+    .composer .keys { display: none; }
+    li .del { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="13" cy="16" r="11" fill="#ff5a1f"/><rect x="17" y="4" width="12" height="12" fill="#ffd23f"/></svg>
+      DJSET COMMENTER
+    </div>
+    <button class="ghost" id="sound" type="button" aria-pressed="true">SOUND ON</button>
+  </header>
+
+  <section class="setup" aria-label="Mix length">
+    <label class="label" for="len"><b>01</b>MIX LENGTH</label>
+    <input id="len" type="text" placeholder="1:00:00" autocomplete="off" spellcheck="false">
+    <div class="chips" id="presets">
+      <button class="chip" type="button" data-min="30">30m</button>
+      <button class="chip" type="button" data-min="60">1h</button>
+      <button class="chip" type="button" data-min="90">90m</button>
+      <button class="chip" type="button" data-min="120">2h</button>
+    </div>
+    <span class="hint">58:30 · 1:32:00 · 90 · 1h30</span>
+  </section>
+
+  <section class="deck" id="deck" data-state="nolen">
+    <button class="play" id="play" type="button" data-state="nolen" aria-label="Play">
+      <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15L19 12z"/></svg>
+      <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+      <svg class="i-replay" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V1.5L6.5 6 12 10.5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+      <span class="num" id="num">3</span>
+    </button>
+
+    <div class="readout">
+      <div class="clock"><span id="clock">00:00</span><span class="of">/ <span id="total">--:--</span></span></div>
+      <div class="status"><i class="dot"></i><span id="status"></span></div>
+      <div class="controls">
+        <div class="nudge" id="nudges" aria-label="Nudge timer">
+          <button type="button" data-d="-5" title="Back 5 seconds">−5s</button>
+          <button type="button" data-d="-1" title="Back 1 second">−1s</button>
+          <button type="button" data-d="1" title="Forward 1 second">+1s</button>
+          <button type="button" data-d="5" title="Forward 5 seconds">+5s</button>
+        </div>
+        <button class="comment-btn" id="comment" type="button">COMMENT <kbd>C</kbd></button>
+      </div>
+    </div>
+  </section>
+
+  <section class="timeline" id="timeline" aria-label="Timeline">
+    <div class="markers" id="markers"></div>
+    <div class="track" id="track">
+      <div class="fill" id="fill"></div>
+      <div class="cticks" id="cticks"></div>
+      <div class="head" id="head"></div>
+      <div class="hover" id="hover" hidden></div>
+    </div>
+    <div class="ticks" id="ticks"></div>
+    <div class="tl-empty" id="tlEmpty">set a mix length to draw the timeline</div>
+    <div class="tip" id="tip" hidden></div>
+  </section>
+
+  <div class="composer" id="composer" hidden>
+    <span class="ct" id="cTime">00:00</span><span class="sep">-</span>
+    <input id="cInput" type="text" placeholder="your comment" autocomplete="off" maxlength="500">
+    <span class="keys">ENTER save · ESC cancel</span>
+    <button class="btn primary" id="cSave" type="button">SAVE</button>
+  </div>
+
+  <section class="list" aria-label="Comments">
+    <div class="list-head">
+      <h2>COMMENTS<span id="count">0</span></h2>
+      <div class="actions">
+        <button class="btn" id="copy" type="button">COPY</button>
+        <button class="btn primary" id="export" type="button">EXPORT .MD</button>
+        <button class="btn" id="clear" type="button">CLEAR</button>
+      </div>
+    </div>
+    <ol id="list"></ol>
+    <div class="empty" id="empty">No comments yet. Hit COMMENT (or press C) while the mix plays.</div>
+  </section>
+
+  <div class="legend">
+    <span><kbd>SPACE</kbd> play / pause</span>
+    <span><kbd>C</kbd> or <kbd>ENTER</kbd> comment</span>
+    <span><kbd>← →</kbd> nudge 1s (<kbd>SHIFT</kbd> 5s)</span>
+    <span>click / drag the timeline to resync</span>
+    <span>click a comment's text to edit it</span>
+  </div>
+</div>
+
+<dialog id="exportDlg">
+  <form method="dialog" id="exportForm">
+    <h3>EXPORT COMMENTS</h3>
+    <p>Mix name</p>
+    <input id="mixName" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. sunset session">
+    <div class="fname">file: <b id="fileName">mix_comments_….md</b></div>
+    <div class="dlg-actions">
+      <button class="btn" type="button" data-close>CANCEL</button>
+      <button class="btn primary" id="exportGo" type="submit">EXPORT</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="clearDlg">
+  <form method="dialog" id="clearForm">
+    <h3>START OVER?</h3>
+    <p id="clearMsg"></p>
+    <div class="dlg-actions">
+      <button class="btn" type="button" data-close>CANCEL</button>
+      <button class="btn danger" type="submit">CLEAR</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const STORE = 'djset_commenter_v1';
+  const COUNTDOWN = 3;
+  const MAX_ROWS = 6; // marker lanes above the track before clustered markers start overlapping
+  const BUBBLE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 1h14v10h-5l-2 3.6L6 11H1z"/></svg>';
+
+  const el = {
+    len: $('#len'), presets: $('#presets'), sound: $('#sound'),
+    deck: $('#deck'), play: $('#play'), num: $('#num'), clock: $('#clock'), total: $('#total'), status: $('#status'),
+    nudges: $('#nudges'), comment: $('#comment'),
+    timeline: $('#timeline'), markers: $('#markers'), track: $('#track'), fill: $('#fill'), cticks: $('#cticks'),
+    head: $('#head'), hover: $('#hover'), ticks: $('#ticks'), tlEmpty: $('#tlEmpty'), tip: $('#tip'),
+    composer: $('#composer'), cTime: $('#cTime'), cInput: $('#cInput'), cSave: $('#cSave'),
+    list: $('#list'), empty: $('#empty'), count: $('#count'),
+    copy: $('#copy'), export: $('#export'), clear: $('#clear'),
+    exportDlg: $('#exportDlg'), exportForm: $('#exportForm'), mixName: $('#mixName'), fileName: $('#fileName'), exportGo: $('#exportGo'),
+    clearDlg: $('#clearDlg'), clearForm: $('#clearForm'), clearMsg: $('#clearMsg'),
+  };
+
+  // The timer is derived, never incremented: position = anchorPos + time since anchorPerf.
+  // During the countdown anchorPerf sits in the future, so background-tab timer throttling
+  // can't drift the clock — it starts exactly 3s after the click.
+  const S = { duration: 0, comments: [], mixName: '', sound: true, live: false, anchorPos: 0, anchorPerf: 0 };
+  let draft = null; // { t } while the composer is open
+
+  /* ── utils ────────────────────────────────────────── */
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const pad = n => String(n).padStart(2, '0');
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  // mm:ss, or h:mm:ss once the mix is an hour or longer
+  function fmt(t, long = S.duration >= 3600) {
+    t = Math.max(0, Math.floor(t));
+    const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+    return long ? `${h}:${pad(m)}:${pad(s)}` : `${pad(h * 60 + m)}:${pad(s)}`;
+  }
+
+  // "90" → 90 min · "58:30" · "1:32:00" · "1h30" · "1h 30m" · "45m" · "90s"
+  function parseLen(str) {
+    str = str.trim().toLowerCase();
+    if (!str) return 0;
+    if (/^\d+(\.\d+)?$/.test(str)) return Math.round(parseFloat(str) * 60);
+    if (/^\d+(:\d{1,2}){1,2}$/.test(str)) {
+      const p = str.split(':').map(Number);
+      if (p.slice(1).some(n => n > 59)) return NaN;
+      return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1];
+    }
+    const m = str.match(/^(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+)\s*(?:m|min)?)?\s*(?:(\d+)\s*s)?$/);
+    if (m && (m[1] || m[2] || m[3])) return Math.round((+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0));
+    return NaN;
+  }
+
+  const sorted = () => [...S.comments].sort((a, b) => a.t - b.t);
+  const line = c => `${fmt(c.t)} - ${c.text}`;
+
+  /* ── persistence ──────────────────────────────────── */
+  function save() {
+    try {
+      localStorage.setItem(STORE, JSON.stringify({
+        duration: S.duration, comments: S.comments, mixName: S.mixName, sound: S.sound, pos: pos(),
+      }));
+    } catch {}
+  }
+  function load() {
+    try {
+      const d = JSON.parse(localStorage.getItem(STORE) || 'null');
+      if (!d) return;
+      S.duration = +d.duration > 0 ? +d.duration : 0;
+      S.comments = Array.isArray(d.comments)
+        ? d.comments.filter(c => c && typeof c.text === 'string' && Number.isFinite(c.t)).map(c => ({ id: c.id || uid(), t: c.t, text: c.text }))
+        : [];
+      S.mixName = typeof d.mixName === 'string' ? d.mixName : '';
+      S.sound = d.sound !== false;
+      S.anchorPos = clamp(+d.pos || 0, 0, S.duration);
+    } catch {}
+  }
+
+  /* ── transport ────────────────────────────────────── */
+  function pos() {
+    if (!S.live) return S.anchorPos;
+    return Math.min(S.anchorPos + Math.max(0, performance.now() - S.anchorPerf) / 1000, S.duration);
+  }
+
+  function play() {
+    if (!S.duration) return needLength();
+    if (S.anchorPos >= S.duration) S.anchorPos = 0;
+    S.live = true;
+    S.anchorPerf = performance.now() + COUNTDOWN * 1000;
+    beep();
+    tick();
+  }
+  function pause() {
+    S.anchorPos = pos();
+    S.live = false;
+    silence();
+    save();
+    tick();
+  }
+  const togglePlay = () => (S.live ? pause() : play());
+
+  function seek(t) {
+    if (!S.duration) return;
+    const now = performance.now();
+    if (S.live && now >= S.anchorPerf) S.anchorPerf = now;
+    S.anchorPos = clamp(t, 0, S.duration);
+    save();
+    tick();
+  }
+
+  function setDuration(sec) {
+    const p = Math.min(pos(), sec);
+    const now = performance.now();
+    if (S.live && now >= S.anchorPerf) S.anchorPerf = now;
+    S.anchorPos = p;
+    S.duration = sec;
+    el.len.value = fmt(sec, sec >= 3600);
+    el.len.classList.remove('bad');
+    if (draft) el.cTime.textContent = fmt(draft.t);
+    save();
+    renderTicks();
+    renderComments();
+    tick();
+  }
+
+  function applyLen() {
+    const v = el.len.value;
+    const sec = parseLen(v);
+    if (!v.trim() && !S.duration) return el.len.classList.remove('bad');
+    if (!Number.isFinite(sec) || sec <= 0 || sec > 24 * 3600) {
+      el.len.classList.remove('bad'); void el.len.offsetWidth; el.len.classList.add('bad');
+      return;
+    }
+    if (sec !== S.duration) setDuration(sec);
+    else el.len.value = fmt(sec, sec >= 3600);
+  }
+
+  function needLength() {
+    el.len.focus();
+    el.len.classList.remove('bad'); void el.len.offsetWidth; el.len.classList.add('bad');
+  }
+
+  /* ── countdown beeps (scheduled on the audio clock, so they stay exact in a background tab) ── */
+  let actx = null, voices = [];
+  function beep() {
+    if (!S.sound) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const t0 = actx.currentTime + 0.005;
+      for (let i = 0; i <= COUNTDOWN; i++) {
+        const go = i === COUNTDOWN, at = t0 + i, len = go ? 0.45 : 0.08;
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.frequency.value = go ? 1320 : 880;
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(0.3, at + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+        o.connect(g); g.connect(actx.destination);
+        o.start(at); o.stop(at + len + 0.05);
+        voices.push(o);
+      }
+    } catch {}
+  }
+  function silence() {
+    voices.forEach(o => { try { o.stop(); } catch {} });
+    voices = [];
+  }
+
+  /* ── frame ────────────────────────────────────────── */
+  const memo = {};
+  const put = (key, val, fn) => { if (memo[key] !== val) { memo[key] = val; fn(val); } };
+
+  const STATUS = {
+    nolen: 'set the mix length to begin',
+    idle: 'hit play · start your mix on the high beep',
+    count: 'get ready · start your mix on the high beep',
+    live: 'live',
+    paused: 'paused · play resumes after a 3s countdown',
+    ended: 'end of mix',
+  };
+
+  function tick() {
+    const now = performance.now();
+    if (S.live && now >= S.anchorPerf && pos() >= S.duration) {
+      S.anchorPos = S.duration;
+      S.live = false;
+      save();
+    }
+    const p = pos();
+    const state = !S.duration ? 'nolen'
+      : S.live ? (now < S.anchorPerf ? 'count' : 'live')
+      : p >= S.duration ? 'ended' : p > 0 ? 'paused' : 'idle';
+    const left = state === 'count' ? Math.ceil((S.anchorPerf - now) / 1000) : 0;
+
+    put('state', state, v => {
+      el.play.dataset.state = v;
+      el.deck.dataset.state = v;
+      el.play.setAttribute('aria-label', { live: 'Pause', count: 'Cancel countdown', ended: 'Restart' }[v] || 'Play');
+      el.status.textContent = STATUS[v];
+    });
+    put('clock', fmt(p), v => (el.clock.textContent = v));
+    put('total', S.duration ? fmt(S.duration) : '--:--', v => (el.total.textContent = v));
+    put('num', left, v => (el.num.textContent = v));
+    if (state === 'count') el.play.style.setProperty('--p', clamp(1 - (S.anchorPerf - now) / (COUNTDOWN * 1000), 0, 1).toFixed(3));
+
+    const pct = S.duration ? (p / S.duration * 100).toFixed(3) + '%' : '0%';
+    put('pct', pct, v => { el.fill.style.width = v; el.head.style.left = v; });
+
+    const title = state === 'nolen' ? 'djset commenter'
+      : (state === 'count' ? `${left}… ` : state === 'live' ? '▶ ' : '❚❚ ') + `${fmt(p)} · djset commenter`;
+    put('title', title, v => (document.title = v));
+  }
+
+  (function loop() { tick(); requestAnimationFrame(loop); })();
+  setInterval(tick, 250); // keeps the tab title + end-of-mix check going while the tab is in the background
+
+  /* ── composer ─────────────────────────────────────── */
+  function startComment() {
+    if (!S.duration) return needLength();
+    if (draft && el.cInput.value.trim()) commitDraft(false);
+    draft = { t: pos() };
+    el.composer.hidden = false;
+    el.cTime.textContent = fmt(draft.t);
+    el.cInput.focus();
+    renderMarkers();
+  }
+  function commitDraft(close = true) {
+    const text = el.cInput.value.trim();
+    if (draft && text) {
+      const c = { id: uid(), t: draft.t, text };
+      S.comments.push(c);
+      save();
+      renderComments();
+      flashItem(c.id, false);
+    }
+    el.cInput.value = '';
+    if (close) closeComposer();
+  }
+  function closeComposer() {
+    draft = null;
+    el.cInput.value = '';
+    el.composer.hidden = true;
+    if (document.activeElement === el.cInput) el.cInput.blur();
+    renderMarkers();
+  }
+
+  /* ── render ───────────────────────────────────────── */
+  function renderTicks() {
+    el.ticks.textContent = '';
+    el.tlEmpty.hidden = !!S.duration;
+    if (!S.duration) return;
+    const mins = S.duration / 60;
+    const step = [1, 2, 5, 10, 15, 20, 30, 60].find(s => mins / s <= 8) || 120;
+    const label = m => (m === 0 ? '0' : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? pad(m % 60) : ''}`);
+    for (let m = 0; m * 60 <= S.duration; m += step) {
+      const x = m * 60 / S.duration * 100;
+      if (m && x > 94) break; // leave room for the end label
+      const s = document.createElement('span');
+      s.style.left = x + '%';
+      s.textContent = label(m);
+      el.ticks.append(s);
+    }
+    const end = document.createElement('span');
+    end.style.left = '100%';
+    end.textContent = fmt(S.duration);
+    el.ticks.append(end);
+  }
+
+  function renderMarkers() {
+    el.markers.textContent = '';
+    el.cticks.textContent = '';
+    hideTip();
+    if (!S.duration) return;
+    const gap = 24 / (el.track.clientWidth || 800) * 100; // marker width in % of the track
+    const rows = [];
+    const items = S.comments.map(c => ({ c, pending: false }));
+    if (draft) items.push({ c: { t: draft.t }, pending: true });
+    items.sort((a, b) => a.c.t - b.c.t).forEach(({ c, pending }) => {
+      const x = clamp(c.t / S.duration * 100, 0, 100);
+      let r = rows.findIndex(v => x - v >= gap);
+      if (r < 0) r = rows.length < MAX_ROWS ? rows.length : rows.indexOf(Math.min(...rows));
+      rows[r] = x;
+
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mk' + (pending ? ' pending' : '');
+      b.style.left = x + '%';
+      b.style.setProperty('--row', r);
+      b.innerHTML = BUBBLE;
+      if (pending) b.tabIndex = -1;
+      else { b.dataset.id = c.id; b.setAttribute('aria-label', line(c)); }
+      el.markers.append(b);
+
+      const k = document.createElement('i');
+      k.style.left = x + '%';
+      if (pending) k.className = 'pending';
+      el.cticks.append(k);
+    });
+    el.markers.style.height = Math.max(3, rows.length) * 22 + 6 + 'px';
+  }
+
+  function renderList() {
+    el.list.textContent = '';
+    for (const c of sorted()) {
+      const li = document.createElement('li');
+      li.dataset.id = c.id;
+      const t = document.createElement('button');
+      t.type = 'button'; t.className = 't'; t.textContent = fmt(c.t); t.title = 'Show on timeline';
+      const sep = document.createElement('span');
+      sep.className = 'sep'; sep.textContent = ' - ';
+      const txt = document.createElement('span');
+      txt.className = 'txt'; txt.textContent = c.text; txt.title = 'Click to edit';
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'del'; del.textContent = '×'; del.setAttribute('aria-label', 'Delete comment');
+      li.append(t, sep, txt, del);
+      el.list.append(li);
+    }
+    const n = S.comments.length;
+    el.count.textContent = n;
+    el.empty.hidden = n > 0;
+    el.copy.disabled = el.export.disabled = n === 0;
+  }
+
+  function renderComments() {
+    renderList();
+    renderMarkers();
+  }
+
+  function flashItem(id, scroll = true) {
+    const li = el.list.querySelector(`li[data-id="${id}"]`);
+    if (!li) return;
+    if (scroll) li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    li.classList.remove('flash'); void li.offsetWidth; li.classList.add('flash');
+  }
+  function flashMarker(id) {
+    const mk = el.markers.querySelector(`.mk[data-id="${id}"]`);
+    if (!mk) return;
+    mk.classList.add('hot');
+    showTip(mk);
+    clearTimeout(flashMarker.t);
+    flashMarker.t = setTimeout(() => { mk.classList.remove('hot'); hideTip(); }, 1600);
+  }
+
+  /* ── tooltip ──────────────────────────────────────── */
+  function showTip(mk) {
+    const c = S.comments.find(x => x.id === mk.dataset.id);
+    if (!c) return;
+    el.tip.textContent = '';
+    const b = document.createElement('b');
+    b.textContent = fmt(c.t);
+    el.tip.append(b, ` - ${c.text}`);
+    el.tip.hidden = false;
+    const box = el.timeline.getBoundingClientRect(), r = mk.getBoundingClientRect();
+    const w = el.tip.offsetWidth;
+    el.tip.style.left = clamp(r.left + r.width / 2 - box.left - w / 2, 8, box.width - w - 8) + 'px';
+    el.tip.style.top = (r.top - box.top - 8) + 'px';
+  }
+  function hideTip() { el.tip.hidden = true; }
+
+  el.markers.addEventListener('pointerover', e => { const mk = e.target.closest('.mk[data-id]'); if (mk) showTip(mk); });
+  el.markers.addEventListener('pointerout', e => { if (e.target.closest('.mk')) hideTip(); });
+  el.markers.addEventListener('focusin', e => { const mk = e.target.closest('.mk[data-id]'); if (mk) showTip(mk); });
+  el.markers.addEventListener('focusout', hideTip);
+  el.markers.addEventListener('click', e => { const mk = e.target.closest('.mk[data-id]'); if (mk) flashItem(mk.dataset.id); });
+
+  /* ── track: click / drag to seek ──────────────────── */
+  let scrubbing = false;
+  const timeAt = x => { const r = el.track.getBoundingClientRect(); return clamp((x - r.left) / r.width, 0, 1) * S.duration; };
+  function showHover(x) {
+    const r = el.track.getBoundingClientRect();
+    el.hover.hidden = false;
+    el.hover.style.left = clamp(x - r.left, 0, r.width) + 'px';
+    el.hover.textContent = fmt(timeAt(x));
+  }
+  el.track.addEventListener('pointerdown', e => {
+    if (!S.duration) return needLength();
+    scrubbing = true;
+    el.track.setPointerCapture(e.pointerId);
+    seek(timeAt(e.clientX));
+    showHover(e.clientX);
+  });
+  el.track.addEventListener('pointermove', e => {
+    if (!S.duration) return;
+    showHover(e.clientX);
+    if (scrubbing) seek(timeAt(e.clientX));
+  });
+  const endScrub = () => { scrubbing = false; };
+  el.track.addEventListener('pointerup', endScrub);
+  el.track.addEventListener('pointercancel', endScrub);
+  el.track.addEventListener('pointerleave', () => { if (!scrubbing) el.hover.hidden = true; });
+  el.track.addEventListener('lostpointercapture', () => { scrubbing = false; el.hover.hidden = true; });
+
+  new ResizeObserver(() => renderMarkers()).observe(el.track);
+
+  /* ── list: edit / delete ──────────────────────────── */
+  el.list.addEventListener('click', e => {
+    const li = e.target.closest('li');
+    if (!li) return;
+    const id = li.dataset.id;
+    if (e.target.closest('.del')) {
+      S.comments = S.comments.filter(c => c.id !== id);
+      save();
+      renderComments();
+    } else if (e.target.closest('.txt')) {
+      editItem(li);
+    } else if (e.target.closest('.t')) {
+      flashMarker(id);
+    }
+  });
+
+  function editItem(li) {
+    const c = S.comments.find(x => x.id === li.dataset.id);
+    const span = li.querySelector('.txt');
+    if (!c || !span) return;
+    const inp = document.createElement('input');
+    inp.className = 'edit';
+    inp.value = c.text;
+    inp.maxLength = 500;
+    span.replaceWith(inp);
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
+    let done = false;
+    const finish = keep => {
+      if (done) return;
+      done = true;
+      const v = inp.value.trim();
+      if (keep && v && v !== c.text) { c.text = v; save(); }
+      renderComments();
+    };
+    inp.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') finish(true);
+      else if (e.key === 'Escape') finish(false);
+    });
+    inp.addEventListener('blur', () => finish(true));
+  }
+
+  /* ── copy / export / clear ────────────────────────── */
+  function flashLabel(btn, msg) {
+    btn.dataset.label = btn.dataset.label || btn.textContent;
+    btn.textContent = msg;
+    clearTimeout(btn._t);
+    btn._t = setTimeout(() => (btn.textContent = btn.dataset.label), 1400);
+  }
+
+  async function copyAll() {
+    const text = sorted().map(line).join('\n');
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch {}
+    if (!ok) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+      document.body.append(ta);
+      ta.select();
+      try { ok = document.execCommand('copy'); } catch {}
+      ta.remove();
+    }
+    flashLabel(el.copy, ok ? 'COPIED ✓' : 'COPY FAILED');
+  }
+
+  const safeName = n => n.trim().replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '').replace(/\s+/g, '_').replace(/^\.+|\.+$/g, '');
+  const fileNameFor = n => `mix_comments_${safeName(n)}.md`;
+
+  function updateFileName() {
+    const ok = !!safeName(el.mixName.value);
+    el.fileName.textContent = ok ? fileNameFor(el.mixName.value) : 'mix_comments_….md';
+    el.exportGo.disabled = !ok;
+  }
+
+  function openExport() {
+    if (!S.comments.length) return;
+    el.mixName.value = S.mixName;
+    updateFileName();
+    el.exportDlg.showModal();
+    el.mixName.select();
+  }
+
+  function doExport(name) {
+    name = name.trim().replace(/\s+/g, ' ');
+    // trailing double-space = markdown hard line break, so each comment renders on its own line
+    const md = `# comments ${name}\n\n` + sorted().map(c => line(c) + '  ').join('\n') + '\n';
+    const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileNameFor(name);
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    S.mixName = name;
+    save();
+    flashLabel(el.export, 'EXPORTED ✓');
+  }
+
+  function openClear() {
+    const n = S.comments.length;
+    el.clearMsg.textContent = n
+      ? `Delete all ${n} comment${n === 1 ? '' : 's'} and reset the timer to 00:00? The mix length stays.`
+      : 'Reset the timer to 00:00? The mix length stays.';
+    el.clearDlg.showModal();
+  }
+  function doClear() {
+    silence();
+    S.live = false;
+    S.anchorPos = 0;
+    S.comments = [];
+    S.mixName = '';
+    closeComposer();
+    save();
+    renderComments();
+    tick();
+  }
+
+  /* ── wiring ───────────────────────────────────────── */
+  el.play.addEventListener('click', togglePlay);
+  el.comment.addEventListener('click', startComment);
+  el.cSave.addEventListener('click', () => (el.cInput.value.trim() ? commitDraft() : el.cInput.focus()));
+  el.nudges.addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) seek(pos() + +b.dataset.d); });
+  el.presets.addEventListener('click', e => { const b = e.target.closest('[data-min]'); if (b) setDuration(+b.dataset.min * 60); });
+  el.len.addEventListener('change', applyLen);
+  el.len.addEventListener('keydown', e => { if (e.key === 'Enter') { applyLen(); el.len.blur(); } });
+  el.len.addEventListener('input', () => el.len.classList.remove('bad'));
+
+  el.copy.addEventListener('click', copyAll);
+  el.export.addEventListener('click', openExport);
+  el.clear.addEventListener('click', openClear);
+  el.mixName.addEventListener('input', updateFileName);
+  el.mixName.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); el.exportForm.requestSubmit(); } });
+  el.exportForm.addEventListener('submit', e => {
+    e.preventDefault();
+    if (!safeName(el.mixName.value)) return;
+    doExport(el.mixName.value);
+    el.exportDlg.close();
+  });
+  el.clearForm.addEventListener('submit', e => { e.preventDefault(); doClear(); el.clearDlg.close(); });
+  document.querySelectorAll('dialog [data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+
+  function updateSound() {
+    el.sound.textContent = S.sound ? 'SOUND ON' : 'SOUND OFF';
+    el.sound.setAttribute('aria-pressed', S.sound);
+  }
+  el.sound.addEventListener('click', () => { S.sound = !S.sound; updateSound(); save(); });
+
+  // After a mouse click, drop focus from the button so SPACE / ENTER drive the app, not the last button clicked.
+  document.addEventListener('click', e => { const b = e.target.closest('button'); if (b && e.detail) b.blur(); });
+
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open]')) return;
+    const t = e.target;
+    if (t === el.cInput) {
+      if (e.key === 'Enter') { e.preventDefault(); commitDraft(); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeComposer(); }
+      return;
+    }
+    if (t.matches && t.matches('input, textarea, [contenteditable="true"]')) return;
+    if (t.closest && t.closest('button') && (e.key === 'Enter' || e.key === ' ')) return; // keyboard-focused button: let it activate
+    switch (e.key) {
+      case ' ': e.preventDefault(); togglePlay(); break;
+      case 'Enter': case 'c': case 'C': e.preventDefault(); draft ? el.cInput.focus() : startComment(); break;
+      case 'ArrowLeft': e.preventDefault(); seek(pos() - (e.shiftKey ? 5 : 1)); break;
+      case 'ArrowRight': e.preventDefault(); seek(pos() + (e.shiftKey ? 5 : 1)); break;
+      case 'Escape': if (draft) closeComposer(); break;
+    }
+  });
+
+  window.addEventListener('pagehide', save);
+
+  /* ── boot ─────────────────────────────────────────── */
+  load();
+  if (S.duration) el.len.value = fmt(S.duration, S.duration >= 3600);
+  updateSound();
+  renderTicks();
+  renderComments();
+  tick();
+})();
+</script>
+</body>
+</html>
